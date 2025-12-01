@@ -17,6 +17,9 @@ dev-up:
 	@if [ ! -f .env ]; then \
 		echo "Copying .env.example to .env"; \
 		cp .env.example .env; \
+	fi
+	@if [ ! -f docker/.env ]; then \
+		echo "Copying .env.example to docker/.env"; \
 		cp .env.example docker/.env; \
 	fi
 	docker compose -f docker/compose.development.yaml up -d
