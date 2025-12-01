@@ -1,50 +1,66 @@
-# Docker Services:
-#   up - Start services (use: make up [service...] or make up MODE=prod, ARGS="--build" for options)
-#   down - Stop services (use: make down [service...] or make down MODE=prod, ARGS="--volumes" for options)
-#   build - Build containers (use: make build [service...] or make build MODE=prod)
-#   logs - View logs (use: make logs [service] or make logs SERVICE=backend, MODE=prod for production)
-#   restart - Restart services (use: make restart [service...] or make restart MODE=prod)
-#   shell - Open shell in container (use: make shell [service] or make shell SERVICE=gateway, MODE=prod, default: backend)
-#   ps - Show running containers (use MODE=prod for production)
-#
-# Convenience Aliases (Development):
-#   dev-up - Alias: Start development environment
-#   dev-down - Alias: Stop development environment
-#   dev-build - Alias: Build development containers
-#   dev-logs - Alias: View development logs
-#   dev-restart - Alias: Restart development services
-#   dev-shell - Alias: Open shell in backend container
-#   dev-ps - Alias: Show running development containers
-#   backend-shell - Alias: Open shell in backend container
-#   gateway-shell - Alias: Open shell in gateway container
-#   mongo-shell - Open MongoDB shell
-#
-# Convenience Aliases (Production):
-#   prod-up - Alias: Start production environment
-#   prod-down - Alias: Stop production environment
-#   prod-build - Alias: Build production containers
-#   prod-logs - Alias: View production logs
-#   prod-restart - Alias: Restart production services
-#
-# Backend:
-#   backend-build - Build backend TypeScript
-#   backend-install - Install backend dependencies
-#   backend-type-check - Type check backend code
-#   backend-dev - Run backend in development mode (local, not Docker)
-#
-# Database:
-#   db-reset - Reset MongoDB database (WARNING: deletes all data)
-#   db-backup - Backup MongoDB database
-#
-# Cleanup:
-#   clean - Remove containers and networks (both dev and prod)
-#   clean-all - Remove containers, networks, volumes, and images
-#   clean-volumes - Remove all volumes
-#
-# Utilities:
-#   status - Alias for ps
-#   health - Check service health
-#
-# Help:
-#   help - Display this help message
+.PHONY: help dev-up dev-down prod-up prod-down build-dev build-prod logs-dev logs-prod test clean
 
+help:
+	@echo "Available commands:"
+	@echo "  make dev-up        - Start development environment"
+	@echo "  make dev-down      - Stop development environment"
+	@echo "  make prod-up       - Start production environment"
+	@echo "  make prod-down     - Stop production environment"
+	@echo "  make build-dev     - Build development images"
+	@echo "  make build-prod    - Build production images"
+	@echo "  make logs-dev      - View development logs"
+	@echo "  make logs-prod     - View production logs"
+	@echo "  make test          - Run test suite"
+	@echo "  make clean         - Remove all containers, volumes, and images"
+
+dev-up:
+	@if [ ! -f .env ]; then \
+		echo "Copying .env.example to .env"; \
+		cp .env.example .env; \
+		cp .env.example docker/.env; \
+	fi
+	docker compose -f docker/compose.development.yaml up -d
+
+dev-down:
+	docker compose -f docker/compose.development.yaml down
+
+prod-up:
+	@if [ ! -f .env ]; then \
+		echo "ERROR: .env file not found. Create one from .env.example"; \
+		exit 1; \
+	fi
+	docker compose -f docker/compose.production.yaml up -d --build
+
+prod-down:
+	docker compose -f docker/compose.production.yaml down
+
+build-dev:
+	docker compose -f docker/compose.development.yaml build
+
+build-prod:
+	docker compose -f docker/compose.production.yaml build
+
+logs-dev:
+	docker compose -f docker/compose.development.yaml logs -f
+
+logs-prod:
+	docker compose -f docker/compose.production.yaml logs -f
+
+test:
+	@echo "Testing gateway health..."
+	@curl -f http://localhost:5921/health || echo "Gateway health check failed"
+	@echo "\nTesting backend health via gateway..."
+	@curl -f http://localhost:5921/api/health || echo "Backend health check failed"
+	@echo "\nCreating a product..."
+	@curl -X POST http://localhost:5921/api/products \
+		-H 'Content-Type: application/json' \
+		-d '{"name":"Test Product","price":99.99}' || echo "Product creation failed"
+	@echo "\nGetting all products..."
+	@curl -f http://localhost:5921/api/products || echo "Failed to get products"
+	@echo "\nTesting backend direct access (should fail)..."
+	@curl -s http://localhost:3847/api/products && echo "ERROR: Backend should not be directly accessible" || echo "Success: Backend is not directly accessible"
+
+clean:
+	docker compose -f docker/compose.development.yaml down -v
+	docker compose -f docker/compose.production.yaml down -v
+	docker system prune -f

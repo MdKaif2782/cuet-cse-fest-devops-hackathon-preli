@@ -1,6 +1,62 @@
-# services:
-  # backend:
+version: '3.8'
 
-  # gateway:
+services:
+  gateway:
+    env_file:
+      - .env
+    build:
+      context: ../gateway
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5921:5921"
+    environment:
+      - GATEWAY_PORT=5921
+      - BACKEND_URL=http://backend:3847
+      - PORT=5921
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: always
 
-  # mongo:
+  backend:
+    env_file:
+      - .env
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin
+      - PORT=3847
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: always
+  mongodb:
+    env_file:
+      - .env
+    image: mongo:6
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+volumes:
+  mongodb_data:
+networks:
+  app-network:
+    driver: bridge
